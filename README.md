@@ -5,9 +5,9 @@ This project provides an org.apache.wicket.pageStore.IDataStore implementation t
 
 Requirements
 ------------
-Scala 2.8.0.RC2
-Akka 0.9 (not yet released)
-Apache Wicket 1.5-SNAPSHOT (no release of 1.5 available yet)
+* Scala 2.8.0.RC2
+* Akka 0.9 (not yet released)
+* Apache Wicket 1.5-SNAPSHOT (no release of 1.5 available yet)
 
 
 
