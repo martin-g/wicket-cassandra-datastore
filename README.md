@@ -3,11 +3,21 @@ Wicket Cassandra Datastore
 
 This project provides an org.apache.wicket.pageStore.IDataStore implementation that writes pages to an Apache Cassandra cluster.
 
+
 Requirements
 ------------
 * Scala 2.8.0.RC2
 * Akka 0.9 (not yet released)
 * Apache Wicket 1.5-SNAPSHOT (no release of 1.5 available yet)
+
+
+Keyspace Defintion
+------------------
+	<Keyspace Name="Wicket">
+		<ColumnFamily CompareWith="UTF8Type" Name="Session"/>
+
+		<!-- put rest of the configuration here -->
+	</Keyspace>
 
 
 
