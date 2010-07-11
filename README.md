@@ -29,12 +29,12 @@ Keyspace Defintion
 Schema
 -----------------
 keystore (Wicket)
-   |
-   - super column family (Session)
-       |
-       - super column (session id)
-          |
-          - Column (page id)
+   I
+   ~ super column family (Session)
+       I
+       ~ super column (session id)
+          I
+          ~ Column (page id)
 
 
 Usage
