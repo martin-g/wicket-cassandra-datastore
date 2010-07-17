@@ -1,6 +1,5 @@
 package org.wicketstuff.datastore.cassandra.demo;
 
-import org.apache.wicket.Session;
 import org.apache.wicket.markup.html.WebPage;
 import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.link.Link;
@@ -22,7 +21,7 @@ public class HomePage extends WebPage {
 
 			@Override
 			public void onClick() {
-				Session.get().dirty();
+//				getPage().dirty();
 				counter++;
 			}
 		};
