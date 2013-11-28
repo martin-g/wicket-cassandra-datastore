@@ -121,30 +121,9 @@ public class CassandraDataStore implements IDataStore
 		session = cluster.connect();
 
 		String keyspaceName = settings.getKeyspaceName();
-		KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(keyspaceName);
-		if (keyspaceMetadata == null)
-		{
-			session.execute(
-				String.format("CREATE KEYSPACE %s WITH replication " +
-				"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspaceName));
-			LOGGER.debug("Created keyspace with name {}", keyspaceName);
-		}
+		KeyspaceMetadata keyspaceMetadata = createKeyspaceIfNecessary(keyspaceName, metadata);
 
-		String tableName = settings.getTableName();
-		TableMetadata tableMetadata = keyspaceMetadata != null ? keyspaceMetadata.getTable(tableName) : null;
-		if (tableMetadata == null)
-		{
-			session.execute(
-				String.format(
-				"CREATE TABLE %s.%s (" +
-					"%s varchar," +
-					"%s int," +
-					"%s blob," +
-					"PRIMARY KEY (%s, %s)" +
-				");", keyspaceName, tableName, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
-						COLUMN_SESSION_ID, COLUMN_PAGE_ID));
-			LOGGER.debug("Created table with name {}.{}", keyspaceName, tableName);
-		}
+		createTableIfNecessary(keyspaceName, keyspaceMetadata);
 	}
 
 	@Override
@@ -233,5 +212,52 @@ public class CassandraDataStore implements IDataStore
 	public boolean canBeAsynchronous()
 	{
 		return true;
+	}
+
+
+	/**
+	 * Creates the table where the data will be stored if it doesn't exists already
+	 *
+	 * @param keyspaceName     The name of the keyspace where to create the table
+	 * @param keyspaceMetadata The keyspace metadata. May be {@code null} if this is the first usage
+	 *                         of this store with these settings
+	 */
+	protected void createTableIfNecessary(String keyspaceName, KeyspaceMetadata keyspaceMetadata)
+	{
+		String tableName = settings.getTableName();
+		TableMetadata tableMetadata = keyspaceMetadata != null ? keyspaceMetadata.getTable(tableName) : null;
+		if (tableMetadata == null)
+		{
+			session.execute(
+					String.format(
+							"CREATE TABLE %s.%s (" +
+									"%s varchar," +
+									"%s int," +
+									"%s blob," +
+									"PRIMARY KEY (%s, %s)" +
+									");", keyspaceName, tableName, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
+							COLUMN_SESSION_ID, COLUMN_PAGE_ID));
+			LOGGER.debug("Created table with name {}.{}", keyspaceName, tableName);
+		}
+	}
+
+	/**
+	 * Creates the Cassandra keyspace where the data will be stored if it doesn't exists already
+	 *
+	 * @param keyspaceName The name of the keyspace
+	 * @param metadata     The cluster metadata
+	 * @return The keyspace metadata. May be {@code null} if the the metadata doesn't exists yet.
+	 */
+	protected KeyspaceMetadata createKeyspaceIfNecessary(String keyspaceName, Metadata metadata)
+	{
+		KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(keyspaceName);
+		if (keyspaceMetadata == null)
+		{
+			session.execute(
+					String.format("CREATE KEYSPACE %s WITH replication " +
+							"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspaceName));
+			LOGGER.debug("Created keyspace with name {}", keyspaceName);
+		}
+		return keyspaceMetadata;
 	}
 }
