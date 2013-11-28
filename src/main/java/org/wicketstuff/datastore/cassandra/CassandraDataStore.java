@@ -1,184 +1,159 @@
 package org.wicketstuff.datastore.cassandra;
 
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.ByteBuffer;
 
-import org.apache.cassandra.thrift.Cassandra;
-import org.apache.cassandra.thrift.Column;
-import org.apache.cassandra.thrift.ColumnOrSuperColumn;
-import org.apache.cassandra.thrift.ColumnPath;
-import org.apache.cassandra.thrift.ConsistencyLevel;
-import org.apache.cassandra.thrift.Deletion;
-import org.apache.cassandra.thrift.Mutation;
-import org.apache.cassandra.thrift.NotFoundException;
-import org.apache.cassandra.thrift.SuperColumn;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
 import org.apache.wicket.pageStore.IDataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.Host;
+import com.datastax.driver.core.Metadata;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.Delete;
+import com.datastax.driver.core.querybuilder.Insert;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.core.querybuilder.Select;
+
 /**
  * 
- * @author gseitz 
- * 	<br/>Initial (Scala) version - http://github.com/gseitz/wicket-cassandra-datastore
- * @author martin-g 
- * 	<br/>Translation to Java - http://github.com/martin-g/wicket-cassandra-datastore
  */
-public class CassandraDataStore implements IDataStore {
-
+public class CassandraDataStore implements IDataStore
+{
 	private static final Logger logger = LoggerFactory.getLogger(CassandraDataStore.class);
-	
-	private static final String KEYSPACE = "Wicket";
-	
-	private static final String COLUMN_FAMILY = "Session";
-	
-	private final String applicationName;
-	private final TTransport transport;
-	private final TProtocol protocol;
-	private final Cassandra.Client client;
 
-	public CassandraDataStore(final String appName, final String hostname, final int port) 
-		throws TTransportException {
+	private static final String COLUMN_SESSION_ID = "sessionId";
+
+	private static final String COLUMN_PAGE_ID = "pageId";
+
+	private static final String COLUMN_DATA = "data";
 	
-		this.applicationName = appName;
-		this.transport = new TSocket(hostname, port);
-		this.protocol = new TBinaryProtocol(transport);
-		this.client = new Cassandra.Client(protocol);
-		transport.open();
-	}
+	private final String keyspace = "Wicket";
 
-	@Override
-	public byte[] getData(final String sessionId, final int pageId) {
+	private final String table = "PageStore";
 
-		final ColumnPath columnPath = new ColumnPath();
-		columnPath.setColumn(bytes(pageId));
-		columnPath.setColumn_family(COLUMN_FAMILY);
-		columnPath.setSuper_column(bytes(sessionId));
-		
-		byte[] pageAsBytes = null;
-		try {
-			final ColumnOrSuperColumn columnOrSuperColumn = client.get(KEYSPACE, sessionId, columnPath, ConsistencyLevel.QUORUM);
-			pageAsBytes = columnOrSuperColumn.column.getValue();
-		} catch (final NotFoundException nfx) {
-			// no such page
-			logger.debug("No page with id '{}' in session with id '{}'", pageId, sessionId);
-		} catch (final Exception x) {
-			logger.error("Cannot get page with id '{}' in session with id '{}'", pageId, sessionId);
-			logger.error(x.getMessage(), x);
+	private final Cluster cluster;
+
+	private final Session session;
+
+	private final int timeToLive = 1800; // in seconds. 30 mins
+
+	public CassandraDataStore()
+	{
+		cluster = Cluster.builder()
+				.addContactPoint("localhost").build();
+		Metadata metadata = cluster.getMetadata();
+		System.out.printf("Connected to cluster: %s\n",
+				metadata.getClusterName());
+		for ( Host host : metadata.getAllHosts() ) {
+			logger.debug("Datatacenter: {}; Host: {}; Rack: {}\n",
+					new Object[] {host.getDatacenter(), host.getAddress(), host.getRack()});
 		}
-		
-		return pageAsBytes;
+
+		session = cluster.connect();
+
+		session.execute(
+				String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication " +
+				"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspace));
+
+		session.execute(
+				String.format(
+				"CREATE TABLE IF NOT EXISTS %s.%s (" +
+					"%s varchar," +
+					"%s int," +
+					"%s blob," +
+					"PRIMARY KEY (%s, %s)" +
+				");", keyspace, table, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
+						COLUMN_SESSION_ID, COLUMN_PAGE_ID));
 	}
 
 	@Override
-	public void removeData(final String sessionId, final int pageId) {
+	public byte[] getData(String sessionId, int pageId)
+	{
+		Select.Where dataSelect = QueryBuilder
+				.select("data")
+				.from(keyspace, table)
+				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId))
+				.and(QueryBuilder.eq(COLUMN_PAGE_ID, pageId));
+		ResultSet rows = session.execute(dataSelect);
+		Row row = rows.one();
+		byte[] bytes = null;
+		if (row != null)
+		{
+			ByteBuffer data = row.getBytes(COLUMN_DATA);
+			bytes = new byte[data.remaining()];
+			data.get(bytes);
 
-		final ColumnPath columnPath = new ColumnPath();
-		columnPath.setColumn(bytes(pageId));
-		columnPath.setColumn_family(COLUMN_FAMILY);
-		columnPath.setSuper_column(bytes(sessionId));
-		try {
-			client.remove(KEYSPACE, sessionId, columnPath, System.currentTimeMillis(), ConsistencyLevel.QUORUM);
-		} catch (final Exception x) {
-			logger.error("Cannot remove page with id '{}'", pageId);
-			logger.error(x.getMessage(), x);
+			logger.debug("Got {} for session '{}' and page id '{}'",
+					new Object[] {bytes != null ? "data" : "'null'", sessionId, pageId});
 		}
+		return bytes;
 	}
 
 	@Override
-	public void removeData(final String sessionId) {
-		
-		final Deletion deletion = new Deletion();
-		deletion.setSuper_column(bytes(sessionId));
-		
-		final Mutation removeMutation = new Mutation();
-		removeMutation.setDeletion(deletion);
-		
-		final List<Mutation> mutations = new ArrayList<Mutation>();
-		mutations.add(removeMutation);
-		
-		final Map<String, List<Mutation>> job = new HashMap<String, List<Mutation>>();
-		job.put(COLUMN_FAMILY, mutations);
-		
-		final Map<String, Map<String, List<Mutation>>> batch = new HashMap<String, Map<String,List<Mutation>>>();
-		batch.put(sessionId, job);
-		
-		try {
-			client.batch_mutate(KEYSPACE, batch, ConsistencyLevel.ANY);
-		} catch (final Exception x) {
-			logger.error("Cannot remove session with id '{}'", sessionId);
-			logger.error(x.getMessage(), x);
-		}
-	}
-
-	@Override
-	public void storeData(final String sessionId, final int pageId, final byte[] data) {
-
-		final Column pageVersionDataColumn = new Column(bytes(pageId), data, System.currentTimeMillis());
-
-		final SuperColumn sessionIdSuperColumn = new SuperColumn();
-		sessionIdSuperColumn.setName(bytes(sessionId));
-		sessionIdSuperColumn.setColumns(Arrays.asList(pageVersionDataColumn));
-
-		final ColumnOrSuperColumn newVersionColumnOrSuperColumn = new ColumnOrSuperColumn();
-		newVersionColumnOrSuperColumn.setSuper_column(sessionIdSuperColumn);
-		
-		final Mutation storeMutation = new Mutation();
-		storeMutation.setColumn_or_supercolumn(newVersionColumnOrSuperColumn);
-		
-		final List<Mutation> mutations = new ArrayList<Mutation>();
-		mutations.add(storeMutation);
-		
-		final Map<String, List<Mutation>> job = new HashMap<String, List<Mutation>>();
-		job.put(COLUMN_FAMILY, mutations);
-		
-		final Map<String, Map<String, List<Mutation>>> batch = new HashMap<String, Map<String,List<Mutation>>>();
-		batch.put(sessionId, job);
-		
-		try {
-			client.batch_mutate(KEYSPACE, batch, ConsistencyLevel.ANY);
-		} catch (final Exception x) {
-			logger.error("Cannot store new page version. Id: '{}'!", pageId);
-			logger.error(x.getMessage(), x);
+	public void removeData(String sessionId, int pageId)
+	{
+		Delete.Where delete = QueryBuilder
+				.delete()
+				.all()
+				.from(keyspace, table)
+				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId))
+				.and(QueryBuilder.eq(COLUMN_PAGE_ID, pageId));
+		ResultSet rows = session.execute(delete);
+		if (logger.isDebugEnabled())
+		{
+			logger.debug("Deleted {} rows for session '{}' and page with id '{}'",
+					new Object[] {rows.all().size(), sessionId, pageId});
 		}
 	}
-	
+
 	@Override
-	public void destroy() {
-		try {
-			transport.flush();
-		} catch (TTransportException ttx) {
-			logger.warn("Cannot flush the connection: {}", ttx.getMessage());
-		}
-		transport.close();
+	public void removeData(String sessionId)
+	{
+		Delete.Where delete = QueryBuilder
+				.delete()
+				.all()
+				.from(keyspace, table)
+				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId));
+		session.execute(delete);
+
+		logger.debug("Deleted data for session '{}'", sessionId);
 	}
 
 	@Override
-	public boolean isReplicated() {
+	public void storeData(String sessionId, int pageId, byte[] data)
+	{
+		Insert insert = QueryBuilder
+				.insertInto(keyspace, table)
+				.using(QueryBuilder.ttl(timeToLive))
+				.values(new String[]{COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA},
+						new Object[]{sessionId, pageId, ByteBuffer.wrap(data)});
+		session.execute(insert);
+
+		logger.debug("Inserted data for session '{}' and page id '{}'",
+					sessionId, pageId);
+	}
+
+	@Override
+	public void destroy()
+	{
+		if (cluster != null)
+		{
+			cluster.shutdown();
+		}
+	}
+
+	@Override
+	public boolean isReplicated()
+	{
 		return true;
 	}
-	
 
-	private byte[] bytes(final String target) {
-		byte[] result = null;
-		try {
-			result = target.getBytes("UTF-8");
-		} catch (final UnsupportedEncodingException e) {
-			logger.error("Unsupported UTF-8 encoding?!");
-		}
-		return result;
+	@Override
+	public boolean canBeAsynchronous()
+	{
+		return false;
 	}
-	
-	private byte[] bytes(final int i) {
-		return bytes(String.valueOf(i));
-	}
-
 }

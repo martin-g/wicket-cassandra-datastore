@@ -5,10 +5,10 @@ import org.apache.wicket.ajax.markup.html.AjaxLink;
 import org.apache.wicket.markup.html.WebPage;
 import org.apache.wicket.request.mapper.parameter.PageParameters;
 
-public class HomePage extends WebPage {
+public class Page2 extends WebPage {
 	private static final long serialVersionUID = 1L;
 
-	public HomePage(final PageParameters parameters) {
+	public Page2(final PageParameters parameters) {
 		super(parameters);
 
 		add(new AjaxLink<Void>("link") {
@@ -16,7 +16,7 @@ public class HomePage extends WebPage {
 			public void onClick(AjaxRequestTarget target)
 			{
 				// create a new page
-				setResponsePage(Page2.class);
+				setResponsePage(HomePage.class);
 			}
 		});
     }

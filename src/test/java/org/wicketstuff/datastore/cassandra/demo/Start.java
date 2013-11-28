@@ -1,24 +1,52 @@
 package org.wicketstuff.datastore.cassandra.demo;
 
-import org.eclipse.jetty.server.Connector;
+import org.apache.wicket.util.time.Duration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.bio.SocketConnector;
+import org.eclipse.jetty.server.ssl.SslSocketConnector;
+import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.webapp.WebAppContext;
 
-/**
- * Starts Jetty for demos
- */
 public class Start {
-
 	public static void main(String[] args) throws Exception {
+		int timeout = (int) Duration.ONE_HOUR.getMilliseconds();
+
 		Server server = new Server();
 		SocketConnector connector = new SocketConnector();
 
 		// Set some timeout options to make debugging easier.
-		connector.setMaxIdleTime(1000 * 60 * 60);
+		connector.setMaxIdleTime(timeout);
 		connector.setSoLingerTime(-1);
 		connector.setPort(8080);
-		server.setConnectors(new Connector[] { connector });
+		server.addConnector(connector);
+
+		Resource keystore = Resource.newClassPathResource("/keystore");
+		if (keystore != null && keystore.exists()) {
+			// if a keystore for a SSL certificate is available, start a SSL
+			// connector on port 8443.
+			// By default, the quickstart comes with a Apache Wicket Quickstart
+			// Certificate that expires about half way september 2021. Do not
+			// use this certificate anywhere important as the passwords are
+			// available in the source.
+
+			connector.setConfidentialPort(8443);
+
+			SslContextFactory factory = new SslContextFactory();
+			factory.setKeyStoreResource(keystore);
+			factory.setKeyStorePassword("wicket");
+			factory.setTrustStoreResource(keystore);
+			factory.setKeyManagerPassword("wicket");
+			SslSocketConnector sslConnector = new SslSocketConnector(factory);
+			sslConnector.setMaxIdleTime(timeout);
+			sslConnector.setPort(8443);
+			sslConnector.setAcceptors(4);
+			server.addConnector(sslConnector);
+
+			System.out.println("SSL access to the quickstart has been enabled on port 8443");
+			System.out.println("You can access the application using SSL on https://localhost:8443");
+			System.out.println();
+		}
 
 		WebAppContext bb = new WebAppContext();
 		bb.setServer(server);
@@ -38,14 +66,11 @@ public class Start {
 			server.start();
 			System.in.read();
 			System.out.println(">>> STOPPING EMBEDDED JETTY SERVER");
-            // while (System.in.available() == 0) {
-			//   Thread.sleep(5000);
-			// }
 			server.stop();
 			server.join();
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.exit(100);
+			System.exit(1);
 		}
 	}
 }
