@@ -22,7 +22,7 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Select;
 
 /**
- * 
+ * An IDataStore that saves the pages' bytes in Apache Cassandra
  */
 public class CassandraDataStore implements IDataStore
 {
@@ -53,8 +53,19 @@ public class CassandraDataStore implements IDataStore
 	 */
 	private final Session session;
 
+	/**
+	 * The various settings
+	 */
 	private final ICassandraSettings settings;
 
+	/**
+	 * Constructor.
+	 *
+	 * Creates a Cluster based on the contact points provided
+	 * by the passed settings
+	 *
+	 * @param settings The various settings
+	 */
 	public CassandraDataStore(ICassandraSettings settings)
 	{
 		this(createCluster(settings), settings);
@@ -79,6 +90,15 @@ public class CassandraDataStore implements IDataStore
 		return cluster;
 	}
 
+	/**
+	 * Constructor.
+	 *
+	 * Initializes the connection to the Cassandra cluster and creates
+	 * the keyspace and/or table if necessary.
+	 *
+	 * @param cluster  The Cassandra cluster
+	 * @param settings The various settings
+	 */
 	public CassandraDataStore(Cluster cluster, ICassandraSettings settings)
 	{
 		this.cluster = Args.notNull(cluster, "cluster");
