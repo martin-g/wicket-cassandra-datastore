@@ -17,6 +17,10 @@ public class CassandraSettings implements ICassandraSettings
 
 	private Duration recordTtl = Duration.minutes(30);
 
+	private Duration sessionShutdown = Duration.minutes(1);
+
+	private Duration clusterShutdown = Duration.minutes(1);
+
 	private final List<String> contactPoints = new ArrayList<String>();
 
 	public CassandraSettings()
@@ -66,5 +70,31 @@ public class CassandraSettings implements ICassandraSettings
 	public List<String> getContactPoints()
 	{
 		return contactPoints;
+	}
+
+	@Override
+	public ICassandraSettings setSessionShutdown(Duration sessionShutdown)
+	{
+		this.sessionShutdown = Args.notNull(sessionShutdown, "sessionShutdown");
+		return this;
+	}
+
+	@Override
+	public Duration getSessionShutdown()
+	{
+		return sessionShutdown;
+	}
+
+	@Override
+	public ICassandraSettings setClusterShutdown(Duration clusterShutdown)
+	{
+		this.clusterShutdown = Args.notNull(clusterShutdown, "clusterShutdown");
+		return this;
+	}
+
+	@Override
+	public Duration getClusterShutdown()
+	{
+		return clusterShutdown;
 	}
 }
