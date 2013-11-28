@@ -2,6 +2,8 @@ package org.wicketstuff.datastore.cassandra;
 
 import java.nio.ByteBuffer;
 
+import com.datastax.driver.core.KeyspaceMetadata;
+import com.datastax.driver.core.TableMetadata;
 import org.apache.wicket.pageStore.IDataStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,19 +56,27 @@ public class CassandraDataStore implements IDataStore
 
 		session = cluster.connect();
 
-		session.execute(
-				String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication " +
+		KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(keyspace);
+		if (keyspaceMetadata == null)
+		{
+			session.execute(
+				String.format("CREATE KEYSPACE %s WITH replication " +
 				"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspace));
+		}
 
-		session.execute(
+		TableMetadata tableMetadata = keyspaceMetadata != null ? keyspaceMetadata.getTable(table) : null;
+		if (tableMetadata == null)
+		{
+			session.execute(
 				String.format(
-				"CREATE TABLE IF NOT EXISTS %s.%s (" +
+				"CREATE TABLE %s.%s (" +
 					"%s varchar," +
 					"%s int," +
 					"%s blob," +
 					"PRIMARY KEY (%s, %s)" +
 				");", keyspace, table, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
 						COLUMN_SESSION_ID, COLUMN_PAGE_ID));
+		}
 	}
 
 	@Override
