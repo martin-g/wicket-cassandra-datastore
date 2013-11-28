@@ -1,10 +1,12 @@
 package org.wicketstuff.datastore.cassandra;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 
 import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.TableMetadata;
 import org.apache.wicket.pageStore.IDataStore;
+import org.apache.wicket.util.lang.Args;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,47 +26,91 @@ import com.datastax.driver.core.querybuilder.Select;
  */
 public class CassandraDataStore implements IDataStore
 {
-	private static final Logger logger = LoggerFactory.getLogger(CassandraDataStore.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(CassandraDataStore.class);
 
+	/**
+	 * The name of the column where the session ids will be stored
+	 */
 	private static final String COLUMN_SESSION_ID = "sessionId";
 
+	/**
+	 * The name of the column where the page ids will be stored
+	 */
 	private static final String COLUMN_PAGE_ID = "pageId";
 
+	/**
+	 * The name of the column where the pages' bytes will be stored
+	 */
 	private static final String COLUMN_DATA = "data";
 	
-	private final String keyspace = "Wicket";
-
-	private final String table = "PageStore";
-
+	/**
+	 * The Cassandra cluster
+	 */
 	private final Cluster cluster;
 
+	/**
+	 * The connection to the cluster
+	 */
 	private final Session session;
 
-	private final int timeToLive = 1800; // in seconds. 30 mins
+	private final ICassandraSettings settings;
 
-	public CassandraDataStore()
+	public CassandraDataStore(ICassandraSettings settings)
 	{
-		cluster = Cluster.builder()
-				.addContactPoint("localhost").build();
+		this(createCluster(settings), settings);
+	}
+
+	private static Cluster createCluster(ICassandraSettings settings)
+	{
+		Args.notNull(settings, "settings");
+
+		List<String> contactPoints = settings.getContactPoints();
+		if (contactPoints == null || contactPoints.size() == 0)
+		{
+			throw new IllegalArgumentException("At least one contact point must be provided" +
+					"to be able to connect to Cassandra. See ICassandraSettings#getContactPoints.");
+		}
+
+		String[] contactPointsAsArray = contactPoints.toArray(new String[contactPoints.size()]);
+
+		Cluster cluster = Cluster.builder()
+				.addContactPoints(contactPointsAsArray).build();
+
+		return cluster;
+	}
+
+	public CassandraDataStore(Cluster cluster, ICassandraSettings settings)
+	{
+		this.cluster = Args.notNull(cluster, "cluster");
+		this.settings = Args.notNull(settings, "settings");
+
 		Metadata metadata = cluster.getMetadata();
-		System.out.printf("Connected to cluster: %s\n",
-				metadata.getClusterName());
-		for ( Host host : metadata.getAllHosts() ) {
-			logger.debug("Datatacenter: {}; Host: {}; Rack: {}\n",
-					new Object[] {host.getDatacenter(), host.getAddress(), host.getRack()});
+
+		if (LOGGER.isInfoEnabled())
+		{
+			LOGGER.info("Connected to cluster: {}", metadata.getClusterName());
+
+			for (Host host : metadata.getAllHosts())
+			{
+				LOGGER.info("Datatacenter: {}; Host: {}; Rack: {}",
+						new Object[]{host.getDatacenter(), host.getAddress(), host.getRack()});
+			}
 		}
 
 		session = cluster.connect();
 
-		KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(keyspace);
+		String keyspaceName = settings.getKeyspaceName();
+		KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(keyspaceName);
 		if (keyspaceMetadata == null)
 		{
 			session.execute(
 				String.format("CREATE KEYSPACE %s WITH replication " +
-				"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspace));
+				"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspaceName));
+			LOGGER.debug("Created keyspace with name {}", keyspaceName);
 		}
 
-		TableMetadata tableMetadata = keyspaceMetadata != null ? keyspaceMetadata.getTable(table) : null;
+		String tableName = settings.getTableName();
+		TableMetadata tableMetadata = keyspaceMetadata != null ? keyspaceMetadata.getTable(tableName) : null;
 		if (tableMetadata == null)
 		{
 			session.execute(
@@ -74,8 +120,9 @@ public class CassandraDataStore implements IDataStore
 					"%s int," +
 					"%s blob," +
 					"PRIMARY KEY (%s, %s)" +
-				");", keyspace, table, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
+				");", keyspaceName, tableName, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
 						COLUMN_SESSION_ID, COLUMN_PAGE_ID));
+			LOGGER.debug("Created table with name {}.{}", keyspaceName, tableName);
 		}
 	}
 
@@ -83,8 +130,8 @@ public class CassandraDataStore implements IDataStore
 	public byte[] getData(String sessionId, int pageId)
 	{
 		Select.Where dataSelect = QueryBuilder
-				.select("data")
-				.from(keyspace, table)
+				.select(COLUMN_DATA)
+				.from(settings.getKeyspaceName(), settings.getTableName())
 				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId))
 				.and(QueryBuilder.eq(COLUMN_PAGE_ID, pageId));
 		ResultSet rows = session.execute(dataSelect);
@@ -96,8 +143,7 @@ public class CassandraDataStore implements IDataStore
 			bytes = new byte[data.remaining()];
 			data.get(bytes);
 
-			logger.debug("Got {} for session '{}' and page id '{}'",
-					new Object[] {bytes != null ? "data" : "'null'", sessionId, pageId});
+			LOGGER.debug("Got data for session '{}' and page id '{}'", sessionId, pageId);
 		}
 		return bytes;
 	}
@@ -108,15 +154,12 @@ public class CassandraDataStore implements IDataStore
 		Delete.Where delete = QueryBuilder
 				.delete()
 				.all()
-				.from(keyspace, table)
+				.from(settings.getKeyspaceName(), settings.getTableName())
 				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId))
 				.and(QueryBuilder.eq(COLUMN_PAGE_ID, pageId));
-		ResultSet rows = session.execute(delete);
-		if (logger.isDebugEnabled())
-		{
-			logger.debug("Deleted {} rows for session '{}' and page with id '{}'",
-					new Object[] {rows.all().size(), sessionId, pageId});
-		}
+		session.execute(delete);
+
+		LOGGER.debug("Deleted data for session '{}' and page with id '{}'", sessionId, pageId);
 	}
 
 	@Override
@@ -125,30 +168,34 @@ public class CassandraDataStore implements IDataStore
 		Delete.Where delete = QueryBuilder
 				.delete()
 				.all()
-				.from(keyspace, table)
+				.from(settings.getKeyspaceName(), settings.getTableName())
 				.where(QueryBuilder.eq(COLUMN_SESSION_ID, sessionId));
 		session.execute(delete);
 
-		logger.debug("Deleted data for session '{}'", sessionId);
+		LOGGER.debug("Deleted data for session '{}'", sessionId);
 	}
 
 	@Override
 	public void storeData(String sessionId, int pageId, byte[] data)
 	{
 		Insert insert = QueryBuilder
-				.insertInto(keyspace, table)
-				.using(QueryBuilder.ttl(timeToLive))
+				.insertInto(settings.getKeyspaceName(), settings.getTableName())
+				.using(QueryBuilder.ttl((int) settings.getRecordTtl().minutes()))
 				.values(new String[]{COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA},
 						new Object[]{sessionId, pageId, ByteBuffer.wrap(data)});
 		session.execute(insert);
 
-		logger.debug("Inserted data for session '{}' and page id '{}'",
-					sessionId, pageId);
+		LOGGER.debug("Inserted data for session '{}' and page id '{}'", sessionId, pageId);
 	}
 
 	@Override
 	public void destroy()
 	{
+		if (session != null)
+		{
+			session.shutdown();
+		}
+
 		if (cluster != null)
 		{
 			cluster.shutdown();

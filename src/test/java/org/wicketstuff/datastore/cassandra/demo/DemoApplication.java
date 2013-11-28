@@ -5,6 +5,8 @@ import org.apache.wicket.Page;
 import org.apache.wicket.pageStore.IDataStore;
 import org.apache.wicket.protocol.http.WebApplication;
 import org.wicketstuff.datastore.cassandra.CassandraDataStore;
+import org.wicketstuff.datastore.cassandra.CassandraSettings;
+import org.wicketstuff.datastore.cassandra.ICassandraSettings;
 
 public class DemoApplication extends WebApplication
 {
@@ -30,7 +32,9 @@ public class DemoApplication extends WebApplication
 			@Override
 			protected IDataStore newDataStore()
 			{
-				return new CassandraDataStore(/*"localhost", 9160*/);
+				ICassandraSettings settings = new CassandraSettings();
+				settings.getContactPoints().add("localhost");
+				return new CassandraDataStore(settings);
 			}
 		});
 	}
