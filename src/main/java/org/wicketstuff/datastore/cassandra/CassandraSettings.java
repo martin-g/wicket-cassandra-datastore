@@ -2,6 +2,7 @@ package org.wicketstuff.datastore.cassandra;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.wicket.util.lang.Args;
 import org.apache.wicket.util.time.Duration;
@@ -11,9 +12,9 @@ import org.apache.wicket.util.time.Duration;
  */
 public class CassandraSettings implements ICassandraSettings
 {
-	private String keyspaceName = "Wicket";
+	private String keyspaceName = "wicket";
 
-	private String tableName = "PageStore";
+	private String tableName = "pagestore";
 
 	private Duration recordTtl = Duration.minutes(30);
 
@@ -30,7 +31,7 @@ public class CassandraSettings implements ICassandraSettings
 	@Override
 	public ICassandraSettings setKeyspaceName(String keyspaceName)
 	{
-		this.keyspaceName = Args.notNull(keyspaceName, "keyspaceName");
+		this.keyspaceName = Args.notNull(keyspaceName, "keyspaceName").toLowerCase(Locale.ENGLISH);
 		return this;
 	}
 
@@ -43,7 +44,7 @@ public class CassandraSettings implements ICassandraSettings
 	@Override
 	public ICassandraSettings setTableName(String tableName)
 	{
-		this.tableName = Args.notNull(tableName, "tableName");
+		this.tableName = Args.notNull(tableName, "tableName").toLowerCase(Locale.ENGLISH);
 		return null;
 	}
 
