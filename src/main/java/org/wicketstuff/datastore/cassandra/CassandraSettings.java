@@ -12,9 +12,9 @@ import org.apache.wicket.util.time.Duration;
  */
 public class CassandraSettings implements ICassandraSettings
 {
-	private String keyspaceName = "wicket";
+	private String keyspaceName = "Wicket";
 
-	private String tableName = "pagestore";
+	private String tableName = "PageStore";
 
 	private Duration recordTtl = Duration.minutes(30);
 

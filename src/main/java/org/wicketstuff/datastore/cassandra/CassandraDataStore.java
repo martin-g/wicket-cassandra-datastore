@@ -124,6 +124,8 @@ public class CassandraDataStore implements IDataStore
 		KeyspaceMetadata keyspaceMetadata = createKeyspaceIfNecessary(keyspaceName, metadata);
 
 		createTableIfNecessary(keyspaceName, keyspaceMetadata);
+
+		LOGGER.info("Data will be stored in table '{}' in keyspace '{}'.", settings.getTableName(), keyspaceName);
 	}
 
 	@Override
@@ -230,7 +232,7 @@ public class CassandraDataStore implements IDataStore
 		{
 			session.execute(
 				String.format(
-					"CREATE TABLE %s.%s (" +
+					"CREATE TABLE \"%s\".\"%s\" (" +
 						"%s varchar," +
 						"%s int," +
 						"%s blob," +
@@ -254,7 +256,7 @@ public class CassandraDataStore implements IDataStore
 		if (keyspaceMetadata == null)
 		{
 			session.execute(
-					String.format("CREATE KEYSPACE %s WITH replication " +
+					String.format("CREATE KEYSPACE \"%s\" WITH replication " +
 							"= {'class':'SimpleStrategy', 'replication_factor':3};", keyspaceName));
 			LOGGER.debug("Created keyspace with name {}", keyspaceName);
 		}
