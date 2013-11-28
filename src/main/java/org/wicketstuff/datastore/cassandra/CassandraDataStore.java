@@ -229,14 +229,14 @@ public class CassandraDataStore implements IDataStore
 		if (tableMetadata == null)
 		{
 			session.execute(
-					String.format(
-							"CREATE TABLE %s.%s (" +
-									"%s varchar," +
-									"%s int," +
-									"%s blob," +
-									"PRIMARY KEY (%s, %s)" +
-									");", keyspaceName, tableName, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
-							COLUMN_SESSION_ID, COLUMN_PAGE_ID));
+				String.format(
+					"CREATE TABLE %s.%s (" +
+						"%s varchar," +
+						"%s int," +
+						"%s blob," +
+						"PRIMARY KEY (%s, %s)" +
+						");", keyspaceName, tableName, COLUMN_SESSION_ID, COLUMN_PAGE_ID, COLUMN_DATA,
+					COLUMN_SESSION_ID, COLUMN_PAGE_ID));
 			LOGGER.debug("Created table with name {}.{}", keyspaceName, tableName);
 		}
 	}
